@@ -3,6 +3,7 @@
 #include <windows.h>
 #include <bitset>
 #include <hidusage.h>
+#include <Xinput.h>
 
 namespace Proto
 {
@@ -29,6 +30,29 @@ struct RawInputState
 	bool guiOpened = false; // This is just a copy of the variable
 };
 
+enum JoyToKeyContext
+{
+	DEFAULT,
+	GAMEPLAY,
+	MENU
+};
+
+struct JoyToKeyBind
+{
+	JoyToKeyContext context;
+	std::vector<USHORT> xinputVKeys;
+	USHORT outputVKey;
+	bool isToggle;
+};
+
+struct JoyToMouseBind
+{
+	JoyToKeyContext context;
+	std::vector<USHORT> xinputVKeys;
+	std::string outputMouseEvent;
+	bool isToggle;
+};
+
 const size_t RawInputBufferSize = 1024;
 
 class RawInput
@@ -39,11 +63,11 @@ private:
 
 	static const std::vector<USAGE> usageTypesOfInterest;
 
-	static void ProcessMouseInput(const RAWMOUSE& data, HANDLE deviceHandle);
-	static void ProcessKeyboardInput(const RAWKEYBOARD& data, HANDLE deviceHandle);
 
 public:
 	static RawInputState rawInputState;
+	static bool emulatedMouseEvent;
+	static RAWINPUT emulatedRawInputMouse;
 	static HWND rawInputHwnd;
 	static bool forwardRawInput;
 
@@ -51,6 +75,8 @@ public:
 	static bool rawInputBypass;
 	
 	static std::vector<RAWINPUT> rawinputs;
+	/*static std::vector<JoyToKeyBind> joyToKeyBinds;
+	static std::vector<JoyToMouseBind> joyToMouseBinds;*/
 	static RAWINPUT inputBuffer[RawInputBufferSize];
 
 	static bool lockInputToggleEnabled;
@@ -65,6 +91,10 @@ public:
 	static std::bitset<9> GetUsageBitField();
 
 	static void ProcessRawInput(HRAWINPUT rawInputHandle, bool inForeground, const MSG& msg);
+
+	static void ProcessMouseInput(const RAWMOUSE& data, HANDLE deviceHandle);
+	static void ProcessKeyboardInput(const RAWKEYBOARD& data, HANDLE deviceHandle);
+	static void PostRawInputMessage(const RAWINPUT& rawinput);
 		
 	static void InitialiseRawInput();
 

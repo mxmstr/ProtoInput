@@ -4,6 +4,7 @@
 
 namespace Proto
 {
+bool FocusHook::captureState = false;
 
 inline HWND GetHwnd()
 {	
@@ -45,11 +46,15 @@ HWND WINAPI Hook_GetCapture()
 
 HWND WINAPI Hook_SetCapture(HWND inputHwnd)
 {
+	OutputDebugStringA("PROTOINPUT: SetCapture");
+	FocusHook::captureState = true;
 	return inputHwnd;
 }
 
 BOOL WINAPI Hook_ReleaseCapture()
 {
+	OutputDebugStringA("PROTOINPUT: ReleaseCapture");
+	FocusHook::captureState = false;
 	return TRUE;
 }
 

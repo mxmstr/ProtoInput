@@ -52,6 +52,8 @@ public:
 	void ShowGuiStatus() override;
 	void InstallImpl() override;
 	void UninstallImpl() override;
+
+	static bool captureState;
 };
 
 }

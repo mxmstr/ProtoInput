@@ -102,7 +102,7 @@
       <PreprocessorDefinitions>IMGUI_IMPL_WIN32_DISABLE_GAMEPAD;IMGUI_IMPL_WIN32_DISABLE_LINKING_XINPUT;WIN32;_DEBUG;PROTOINPUTHOOKS_EXPORTS;_WINDOWS;_USRDLL;IMGUI_IMPL_OPENGL_LOADER_GLEW;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions);GLEW_NO_GLU;GLEW_STATIC</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
-      <LanguageStandard>stdcpp17</LanguageStandard>
+      <LanguageStandard>stdcpp20</LanguageStandard>
       <AdditionalIncludeDirectories>$(SolutionDir)..\..\lib\BlackBone\src;$(SolutionDir)..\..\lib\imgui;$(SolutionDir)..\..\lib\glew\include;$(SolutionDir)..\..\lib\EasyHook\Public;$(SolutionDir)ProtoInputLoader\include;$(SolutionDir)ProtoInputUtil\include;$(SolutionDir)..\..\lib\openxinput-OpenXinput1_4;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
       <BasicRuntimeChecks>EnableFastChecks</BasicRuntimeChecks>

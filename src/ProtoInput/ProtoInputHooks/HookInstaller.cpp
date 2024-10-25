@@ -5,6 +5,7 @@
 #include "Gui.h"
 #include <vector>
 #include <mutex>
+#include <sstream>
 
 namespace Proto
 {
@@ -64,7 +65,10 @@ std::tuple<NTSTATUS, HookInfo> InstallHook(void* address, void* callback)
 
 	if (FAILED(result))
 	{
-		std::cerr << "Error installing hook, error string: " << RtlGetLastErrorString() << std::endl;
+		std::wstring werr = std::wstring(RtlGetLastErrorString());
+		std::stringstream ss;
+		ss << "Error installing hook, error string: " << std::string(werr.begin(), werr.end()) << std::endl;
+		OutputDebugStringA(ss.str().c_str());
 	}
 	else
 	{
@@ -96,7 +100,10 @@ std::tuple<NTSTATUS, HookInfo> InstallNamedHook(const LPCWSTR moduleHandle, cons
 
 	if (FAILED(result))
 	{
-		std::cerr << "Error installing " << name << " hook, error string: " << RtlGetLastErrorString() << std::endl;
+		std::wstring werr = std::wstring(RtlGetLastErrorString());
+		std::stringstream ss;
+		ss << "Error installing " << name << " hook, error string: " << std::string(werr.begin(), werr.end()) << std::endl;
+		OutputDebugStringA(ss.str().c_str());
 	}
 	else
 	{
