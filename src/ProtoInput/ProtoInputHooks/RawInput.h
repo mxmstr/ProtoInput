@@ -4,6 +4,7 @@
 #include <bitset>
 #include <hidusage.h>
 #include <Xinput.h>
+#include <chrono>
 
 namespace Proto
 {
@@ -37,20 +38,24 @@ enum JoyToKeyContext
 	MENU
 };
 
+enum JoyToKeyEventType
+{
+	PRESSED,
+	JUSTPRESSED,
+	JUSTRELEASED
+};
+
 struct JoyToKeyBind
 {
 	JoyToKeyContext context;
 	std::vector<USHORT> xinputVKeys;
-	USHORT outputVKey;
-	bool isToggle;
-};
+	std::vector<USHORT> outputVKeys;
+	std::vector<std::string> outputMouseEvents;
+	JoyToKeyEventType eventType;
+	double deadzone;
+	int minActiveTime;
 
-struct JoyToMouseBind
-{
-	JoyToKeyContext context;
-	std::vector<USHORT> xinputVKeys;
-	std::string outputMouseEvent;
-	bool isToggle;
+	std::chrono::steady_clock::time_point lastActiveTime;
 };
 
 const size_t RawInputBufferSize = 1024;
@@ -60,9 +65,7 @@ class RawInput
 private:
 	static std::bitset<9> usages;
 	static std::vector<HWND> forwardingWindows;
-
 	static const std::vector<USAGE> usageTypesOfInterest;
-
 
 public:
 	static RawInputState rawInputState;
@@ -100,6 +103,8 @@ public:
 
 	static void UnregisterGameFromRawInput();
 	static void RegisterProtoForRawInput();
+
+	static void JoyToKeyThread();
 };
 
 }

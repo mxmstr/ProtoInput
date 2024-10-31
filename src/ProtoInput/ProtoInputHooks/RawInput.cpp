@@ -32,17 +32,19 @@ bool RawInput::rawInputBypass = false;
 RAWINPUT RawInput::inputBuffer[RawInputBufferSize]{};
 std::vector<RAWINPUT> RawInput::rawinputs{};
 
-static std::vector<JoyToKeyBind> joyToKeyBinds{};
-static std::vector<JoyToMouseBind> joyToMouseBinds{};
+static std::vector<JoyToKeyBind> joyToKeyboardBinds{};
+static std::vector<JoyToKeyBind> joyToMouseBinds{};
 static JoyToKeyBind toggleContextBind{};
 static bool joyToKeyEnabled = true;
 static int controllerIndex = 0;
 static int defaultContext = 0;
 static int autoSwitchContext = 0;
 static int thumbstickToMouseDelta = 0;
-static float mouseSpeed = 1.0f;
-static float mouseAcceleration = 1.0f;
-static float mouseSmoothing = 0.0f;
+static double mouseSpeed = 1.0;
+static double mouseAcceleration = 1.0;
+static double mouseSmoothing = 0.0;
+static double mouseDeadzone = 0.0;
+static double mouseVerticalScale = 1.0;
 
 const std::vector<USAGE> RawInput::usageTypesOfInterest
 {
@@ -54,39 +56,59 @@ const std::vector<USAGE> RawInput::usageTypesOfInterest
 		HID_USAGE_GENERIC_KEYPAD,
 		//HID_USAGE_GENERIC_MULTI_AXIS_CONTROLLER
 };
+
+#define XINPUT_GAMEPAD_LEFT_THUMB_UP			0x9000
+#define XINPUT_GAMEPAD_LEFT_THUMB_DOWN			0x9100
+#define XINPUT_GAMEPAD_LEFT_THUMB_RIGHT			0x9200
+#define XINPUT_GAMEPAD_LEFT_THUMB_LEFT			0x9300
+#define XINPUT_GAMEPAD_LEFT_THUMB_UPLEFT		0x9400
+#define XINPUT_GAMEPAD_LEFT_THUMB_UPRIGHT		0x9500
+#define XINPUT_GAMEPAD_LEFT_THUMB_DOWNRIGHT		0x9600
+#define XINPUT_GAMEPAD_LEFT_THUMB_DOWNLEFT		0x9700
+#define XINPUT_GAMEPAD_RIGHT_THUMB_UP			0x9800
+#define XINPUT_GAMEPAD_RIGHT_THUMB_DOWN			0x9900
+#define XINPUT_GAMEPAD_RIGHT_THUMB_RIGHT		0x9A00
+#define XINPUT_GAMEPAD_RIGHT_THUMB_LEFT			0x9B00
+#define XINPUT_GAMEPAD_RIGHT_THUMB_UPLEFT		0x9C00
+#define XINPUT_GAMEPAD_RIGHT_THUMB_UPRIGHT		0x9D00
+#define XINPUT_GAMEPAD_RIGHT_THUMB_DOWNRIGHT	0x9E00
+#define XINPUT_GAMEPAD_RIGHT_THUMB_DOWNLEFT		0x9F00
+#define XINPUT_GAMEPAD_LEFT_TRIGGER				0xA000
+#define XINPUT_GAMEPAD_RIGHT_TRIGGER			0xA100
+
 const std::unordered_map<std::string, USHORT> xinputvkeys = {
-	{"A", VK_PAD_A},
-	{"B", VK_PAD_B},
-	{"X", VK_PAD_X},
-	{"Y", VK_PAD_Y},
-	{"RSHOULDER", VK_PAD_RSHOULDER},
-	{"LSHOULDER", VK_PAD_LSHOULDER},
-	{"LTRIGGER", VK_PAD_LTRIGGER},
-	{"RTRIGGER", VK_PAD_RTRIGGER},
-	{"DPAD_UP", VK_PAD_DPAD_UP},
-	{"DPAD_DOWN", VK_PAD_DPAD_DOWN},
-	{"DPAD_LEFT", VK_PAD_DPAD_LEFT},
-	{"DPAD_RIGHT", VK_PAD_DPAD_RIGHT},
-	{"START", VK_PAD_START},
-	{"BACK", VK_PAD_BACK},
-	{"LTHUMB_PRESS", VK_PAD_LTHUMB_PRESS},
-	{"RTHUMB_PRESS", VK_PAD_RTHUMB_PRESS},
-	{"LTHUMB_UP", VK_PAD_LTHUMB_UP},
-	{"LTHUMB_DOWN", VK_PAD_LTHUMB_DOWN},
-	{"LTHUMB_RIGHT", VK_PAD_LTHUMB_RIGHT},
-	{"LTHUMB_LEFT", VK_PAD_LTHUMB_LEFT},
-	{"LTHUMB_UPLEFT", VK_PAD_LTHUMB_UPLEFT},
-	{"LTHUMB_UPRIGHT", VK_PAD_LTHUMB_UPRIGHT},
-	{"LTHUMB_DOWNRIGHT", VK_PAD_LTHUMB_DOWNRIGHT},
-	{"LTHUMB_DOWNLEFT", VK_PAD_LTHUMB_DOWNLEFT},
-	{"RTHUMB_UP", VK_PAD_RTHUMB_UP},
-	{"RTHUMB_DOWN", VK_PAD_RTHUMB_DOWN},
-	{"RTHUMB_RIGHT", VK_PAD_RTHUMB_RIGHT},
-	{"RTHUMB_LEFT", VK_PAD_RTHUMB_LEFT},
-	{"RTHUMB_UPLEFT", VK_PAD_RTHUMB_UPLEFT},
-	{"RTHUMB_UPRIGHT", VK_PAD_RTHUMB_UPRIGHT},
-	{"RTHUMB_DOWNRIGHT", VK_PAD_RTHUMB_DOWNRIGHT},
-	{"RTHUMB_DOWNLEFT", VK_PAD_RTHUMB_DOWNLEFT}
+	{"A", XINPUT_GAMEPAD_A},
+	{"B", XINPUT_GAMEPAD_B},
+	{"X", XINPUT_GAMEPAD_X},
+	{"Y", XINPUT_GAMEPAD_Y},
+	{"RSHOULDER", XINPUT_GAMEPAD_RIGHT_SHOULDER},
+	{"LSHOULDER", XINPUT_GAMEPAD_LEFT_SHOULDER},
+	{"LTRIGGER", XINPUT_GAMEPAD_LEFT_TRIGGER},
+	{"RTRIGGER", XINPUT_GAMEPAD_RIGHT_TRIGGER},
+	{"DPAD_UP", XINPUT_GAMEPAD_DPAD_UP},
+	{"DPAD_DOWN", XINPUT_GAMEPAD_DPAD_DOWN},
+	{"DPAD_LEFT", XINPUT_GAMEPAD_DPAD_LEFT},
+	{"DPAD_RIGHT", XINPUT_GAMEPAD_DPAD_RIGHT},
+	{"START", XINPUT_GAMEPAD_START},
+	{"BACK", XINPUT_GAMEPAD_BACK},
+	{"LTHUMB_PRESS", XINPUT_GAMEPAD_LEFT_THUMB},
+	{"RTHUMB_PRESS", XINPUT_GAMEPAD_RIGHT_THUMB},
+	{"LTHUMB_UP", XINPUT_GAMEPAD_LEFT_THUMB_UP},
+	{"LTHUMB_DOWN", XINPUT_GAMEPAD_LEFT_THUMB_DOWN},
+	{"LTHUMB_RIGHT", XINPUT_GAMEPAD_LEFT_THUMB_RIGHT},
+	{"LTHUMB_LEFT", XINPUT_GAMEPAD_LEFT_THUMB_LEFT},
+	{"LTHUMB_UPLEFT", XINPUT_GAMEPAD_LEFT_THUMB_UPLEFT},
+	{"LTHUMB_UPRIGHT", XINPUT_GAMEPAD_LEFT_THUMB_UPRIGHT},
+	{"LTHUMB_DOWNRIGHT", XINPUT_GAMEPAD_LEFT_THUMB_DOWNRIGHT},
+	{"LTHUMB_DOWNLEFT", XINPUT_GAMEPAD_LEFT_THUMB_DOWNLEFT},
+	{"RTHUMB_UP", XINPUT_GAMEPAD_RIGHT_THUMB_UP},
+	{"RTHUMB_DOWN", XINPUT_GAMEPAD_RIGHT_THUMB_DOWN},
+	{"RTHUMB_RIGHT", XINPUT_GAMEPAD_RIGHT_THUMB_RIGHT},
+	{"RTHUMB_LEFT", XINPUT_GAMEPAD_RIGHT_THUMB_LEFT},
+	{"RTHUMB_UPLEFT", XINPUT_GAMEPAD_RIGHT_THUMB_UPLEFT},
+	{"RTHUMB_UPRIGHT", XINPUT_GAMEPAD_RIGHT_THUMB_UPRIGHT},
+	{"RTHUMB_DOWNRIGHT", XINPUT_GAMEPAD_RIGHT_THUMB_DOWNRIGHT},
+	{"RTHUMB_DOWNLEFT", XINPUT_GAMEPAD_RIGHT_THUMB_DOWNLEFT}
 };
 const std::unordered_map<USHORT, USHORT> xinputwbuttons = {
 	{ VK_PAD_DPAD_UP, XINPUT_GAMEPAD_DPAD_UP },
@@ -518,7 +540,7 @@ void RawInput::PostRawInputMessage(const RAWINPUT& rawinput)
 					ProcessKeyboardInput(rawinput.data.keyboard, rawinput.header.hDevice);
 			}
 
-			if ((allowMouse && usages[HID_USAGE_GENERIC_MOUSE]) || (allowKeyboard && usages[HID_USAGE_GENERIC_KEYBOARD]))
+			if (joyToKeyEnabled || ((allowMouse && usages[HID_USAGE_GENERIC_MOUSE]) || (allowKeyboard && usages[HID_USAGE_GENERIC_KEYBOARD])))
 			{
 				for (const auto& hwnd : forwardingWindows)
 				{
@@ -530,12 +552,12 @@ void RawInput::PostRawInputMessage(const RAWINPUT& rawinput)
 					const LPARAM x = (inputBufferCounter) | 0xAB000000;
 					BOOL result = PostMessageW(hwnd, WM_INPUT, RIM_INPUT, x);
 					//OutputDebugStringA("PROTOINPUT: PostMessage ");
-					if (!result)
+					/*if (!result)
 					{
 						OutputDebugStringA("PROTOINPUT: PostMessage failed");
 						DWORD error = GetLastError();
 						OutputDebugStringA(("PROTOINPUT: Error code: " + std::to_string(error)).c_str());
-					}
+					}*/
 				}
 			}
 		}
@@ -672,18 +694,22 @@ void InitJoyToKeyEmulation()
 	autoSwitchContext = GetPrivateProfileIntA("Settings", "AutoSwitchContext", 0, iniFilePath.c_str());
 	thumbstickToMouseDelta = GetPrivateProfileIntA("Settings.Default", "ThumbstickToMouseDelta", 0, iniFilePath.c_str());
 	GetPrivateProfileStringA("Settings.Default", "MouseSpeed", "500.0", setting, sizeof(setting), iniFilePath.c_str());
-	mouseSpeed = std::stof(setting);
+	mouseSpeed = std::stod(setting);
 	GetPrivateProfileStringA("Settings.Default", "MouseAcceleration", "1.0", setting, sizeof(setting), iniFilePath.c_str());
-	mouseAcceleration = std::stof(setting);
+	mouseAcceleration = std::stod(setting);
 	GetPrivateProfileStringA("Settings.Default", "MouseSmoothing", "1.0", setting, sizeof(setting), iniFilePath.c_str());
-	mouseSmoothing = std::stof(setting);
+	mouseSmoothing = std::stod(setting);
+	GetPrivateProfileStringA("Settings.Default", "MouseDeadzone", "0.1", setting, sizeof(setting), iniFilePath.c_str());
+	mouseDeadzone = std::stod(setting);
+	GetPrivateProfileStringA("Settings.Default", "MouseVerticalScale", "1.0", setting, sizeof(setting), iniFilePath.c_str());
+	mouseVerticalScale = std::stod(setting);
 
 	const char* mouseSectionNames[] = { "MouseBinds.Default", "MouseBinds.Gameplay", "MouseBinds.Menu" };
 	const char* keyboardSectionNames[] = { "KeyboardBinds.Default", "KeyboardBinds.Gameplay", "KeyboardBinds.Menu" };
 
 	for (size_t i = 0; i < 3; i++)
 	{
-		char msection[256];
+		char msection[4096];
 		DWORD charsRead = GetPrivateProfileSectionA(mouseSectionNames[i], msection, sizeof(msection), iniFilePath.c_str());
 		std::string line = "";
 		std::vector<std::string> sectionSplit = {};
@@ -713,20 +739,23 @@ void InitJoyToKeyEmulation()
 			for (auto& vkey : keySplit)
 				vkeyValues.push_back(xinputvkeys.at(vkey));
 
-			std::vector<std::string> outputValuesSplit = split(outputValuesStr, ",");
+			std::vector<std::string> outputValuesSplit = split(outputValuesStr, ";");
 			size_t numValues = outputValuesSplit.size();
-			std::string outputMouseEvent = numValues >= 1 ? outputValuesSplit[0] : "";
+			if (!numValues) continue;
+			std::vector<std::string> outputVKeys = split(outputValuesSplit[0], ",");
 
-			JoyToMouseBind bind;
+			JoyToKeyBind bind;
 			bind.context = (JoyToKeyContext)i;
 			bind.xinputVKeys = vkeyValues;
-			bind.outputMouseEvent = outputMouseEvent;
-			bind.isToggle = numValues >= 3 ? std::stoi(outputValuesSplit[1]) : 0;
+			bind.outputMouseEvents = outputVKeys;
+			bind.eventType = (JoyToKeyEventType)(numValues >= 2 ? std::stoi(outputValuesSplit[1]) : 0);
+			bind.deadzone = numValues >= 3 ? std::stof(outputValuesSplit[2]) : 0.0f;
+			bind.minActiveTime = numValues >= 4 ? std::stoi(outputValuesSplit[3]) : 0.0f;
 
 			joyToMouseBinds.push_back(bind);
 		}
 
-		char ksection[256];
+		char ksection[4096];
 		charsRead = GetPrivateProfileSectionA(keyboardSectionNames[i], ksection, sizeof(ksection), iniFilePath.c_str());
 		line = "";
 		sectionSplit = {};
@@ -765,18 +794,88 @@ void InitJoyToKeyEmulation()
 				continue;
 			}
 
-			std::vector<std::string> outputValuesSplit = split(outputValuesStr, ",");
+			std::vector<std::string> outputValuesSplit = split(outputValuesStr, ";");
 			size_t numValues = outputValuesSplit.size();
-			std::string outputVKey = numValues >= 1 ? outputValuesSplit[0] : "";
+			if (!numValues) continue;
+			std::vector<std::string> outputVKeyStrs = split(outputValuesSplit[0], ",");
+			std::vector<USHORT> outputVKeys;
+			for (auto& outputVKey : outputVKeyStrs)
+				outputVKeys.push_back(vkeys.at(outputVKey));
 
 			JoyToKeyBind bind;
 			bind.context = (JoyToKeyContext)i;
-			bind.xinputVKeys = { vkeyValues };
-			bind.outputVKey = vkeys.at(outputVKey);
-			bind.isToggle = numValues >= 3 ? std::stoi(outputValuesSplit[1]) : 0;
+			bind.xinputVKeys = vkeyValues;
+			bind.outputVKeys = outputVKeys;
+			bind.eventType = (JoyToKeyEventType)(numValues >= 2 ? std::stoi(outputValuesSplit[1]) : 0);
+			bind.deadzone = numValues >= 3 ? std::stod(outputValuesSplit[2]) : 0.0;
+			bind.minActiveTime = numValues >= 4 ? std::stoi(outputValuesSplit[3]) : 0;
 
-			joyToKeyBinds.push_back(bind);
+			joyToKeyboardBinds.push_back(bind);
 		}
+	}
+}
+
+void GetAxisState(const XINPUT_STATE& xinputState, const XINPUT_STATE& lastXinputState, USHORT vkey, double deadzone, bool& state, bool& lastState)
+{
+	if (vkey == XINPUT_GAMEPAD_LEFT_THUMB_UP)
+	{
+		state = xinputState.Gamepad.sThumbLY > deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbLY > deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_LEFT_THUMB_DOWN)
+	{
+		state = xinputState.Gamepad.sThumbLY < -deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbLY < -deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_LEFT_THUMB_LEFT)
+	{
+		state = xinputState.Gamepad.sThumbLX < -deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbLX < -deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_LEFT_THUMB_RIGHT)
+	{
+		state = xinputState.Gamepad.sThumbLX > deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbLX > deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_RIGHT_THUMB_UP)
+	{
+		state = xinputState.Gamepad.sThumbRY > deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbRY > deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_RIGHT_THUMB_DOWN)
+	{
+		state = xinputState.Gamepad.sThumbRY < -deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbRY < -deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_RIGHT_THUMB_LEFT)
+	{
+		state = xinputState.Gamepad.sThumbRX < -deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbRX < -deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_RIGHT_THUMB_RIGHT)
+	{
+		state = xinputState.Gamepad.sThumbRX < -deadzone * 32767.0;
+		lastState = lastXinputState.Gamepad.sThumbRX < -deadzone * 32767.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_LEFT_TRIGGER)
+	{
+		state = xinputState.Gamepad.bLeftTrigger > deadzone * 255.0;
+		lastState = lastXinputState.Gamepad.bLeftTrigger > deadzone * 255.0;
+		return;
+	}
+	if (vkey == XINPUT_GAMEPAD_RIGHT_TRIGGER)
+	{
+		state = xinputState.Gamepad.bRightTrigger > deadzone * 255.0;
+		lastState = lastXinputState.Gamepad.bRightTrigger > deadzone * 255.0;
+		return;
 	}
 }
 
@@ -790,7 +889,7 @@ struct MouseSmoothState
 	double rotate_sensitivity_mult = 2.5;
 };
 
-void JoyToKeyThread() 
+void RawInput::JoyToKeyThread()
 {
 	DWORD(WINAPI * XInputGetKeystrokeProc)(DWORD, DWORD, PXINPUT_KEYSTROKE) = nullptr;
 	DWORD(WINAPI * XInputGetStateProc)(DWORD, XINPUT_STATE*) = nullptr;
@@ -802,7 +901,7 @@ void JoyToKeyThread()
 	{
 		if (GetModuleHandleW(xinputName) != nullptr)
 		{
-			std::wstring message = L"PROTOINPUT: XInput dll loaded ";
+			std::wstring message = L"PROTOINPUT: XInput dll found ";
 			OutputDebugStringW((message + xinputName).c_str());
 			XInputGetKeystrokeProc = (DWORD(WINAPI*)(DWORD, DWORD, PXINPUT_KEYSTROKE))GetProcAddress(GetModuleHandleW(xinputName), "XInputGetKeystroke");
 			XInputGetStateProc = (DWORD(WINAPI*)(DWORD, XINPUT_STATE*))GetProcAddress(GetModuleHandleW(xinputName), "XInputGetState");
@@ -825,6 +924,7 @@ void JoyToKeyThread()
 	std::chrono::steady_clock::time_point lastUpdateTime = std::chrono::steady_clock::now();
 	XINPUT_STATE lastXinputState;
 	ZeroMemory(&lastXinputState, sizeof(XINPUT_STATE));
+	WORD lastWaxes = 0;
 
 	RAWINPUT rawInputMouse;
 	ZeroMemory(&rawInputMouse, sizeof(RAWINPUT));
@@ -833,6 +933,7 @@ void JoyToKeyThread()
 	rawInputMouse.header.wParam = RIM_INPUT;
 	rawInputMouse.data.mouse.lLastX = 0;
 	rawInputMouse.data.mouse.lLastY = 0;
+	rawInputMouse.data.mouse.usButtonFlags = 0;
 
 	int currentContext = defaultContext;
 
@@ -852,23 +953,25 @@ void JoyToKeyThread()
 		XINPUT_STATE xinputState;
 		ZeroMemory(&xinputState, sizeof(XINPUT_STATE));
 		if (ERROR_SUCCESS != XInputGetStateProc(controllerIndex, &xinputState)) continue;
-
+		
 		rawInputMouse.data.mouse.lLastX = 0;
 		rawInputMouse.data.mouse.lLastY = 0;
 		rawInputMouse.data.mouse.usButtonFlags = 0;
 
 		if (thumbstickToMouseDelta > 0)
 		{
-			double deltax = thumbstickToMouseDelta == 1 ? lastXinputState.Gamepad.sThumbLX : lastXinputState.Gamepad.sThumbRX;
-			double deltay = thumbstickToMouseDelta == 1 ? lastXinputState.Gamepad.sThumbLY : lastXinputState.Gamepad.sThumbRY;
-			double mouseDelta[2] = { deltax, deltay };
+			double deltax = thumbstickToMouseDelta == 1 ? xinputState.Gamepad.sThumbLX : xinputState.Gamepad.sThumbRX;
+			double deltay = thumbstickToMouseDelta == 1 ? xinputState.Gamepad.sThumbLY : xinputState.Gamepad.sThumbRY;
+			double mouseDelta[2] = { 
+				abs(deltax / 32767.0) > mouseDeadzone ? deltax : 0, 
+				abs(deltay / 32767.0) > mouseDeadzone ? deltay : 0 
+			};
 
 			for (int i = 0; i < 2; i++)
 			{
 				MouseSmoothState& mss = i == 0 ? mouseSmoothStateX : mouseSmoothStateY;
 
-				double delta = mouseDelta[i] / 32767.0 * mouseSpeed;// *deltaTime.count();
-
+				double delta = mouseDelta[i] / 32767.0 * mouseSpeed;
 				double new_speed_pos = delta > 0 ? delta : 0;
 				double new_speed_pos_delta = abs(new_speed_pos) - abs(mss.speed_pos);
 				double new_speed_neg = delta < 0 ? delta : 0;
@@ -876,157 +979,211 @@ void JoyToKeyThread()
 
 				mss.speed_pos += new_speed_pos_delta * min(
 					(new_speed_pos_delta >= 0 ? mss.accel : mss.deaccel), 1.0
-					//* deltaTime.count(), 1.0
 				);
 				mss.speed_neg += new_speed_neg_delta * min(
 					(new_speed_neg_delta >= 0 ? mss.accel : mss.deaccel), 1.0
-					//* deltaTime.count(), 1.0
 				);
 
 				mouseDelta[i] = round(mss.speed_pos - mss.speed_neg);
 			}
 
 			rawInputMouse.data.mouse.lLastX = mouseDelta[0];
-			rawInputMouse.data.mouse.lLastY = -mouseDelta[1];
+			rawInputMouse.data.mouse.lLastY = -mouseDelta[1] * mouseVerticalScale;
 		}
 
-		XINPUT_KEYSTROKE keystroke;
-		bool xinputEvent = XInputGetKeystrokeProc != nullptr ? ERROR_SUCCESS == XInputGetKeystrokeProc(controllerIndex, 0, &keystroke) : false;
-
-		if (xinputEvent)
+		/*if (toggleContextBind.xinputVKeys.size())
 		{
-			if (toggleContextBind.xinputVKeys.size())
-			{
-				bool notInContext = toggleContextBind.context > JoyToKeyContext::DEFAULT &&
-					((autoSwitchContext && !FocusHook::captureState) ||
+			bool notInContext = toggleContextBind.context > JoyToKeyContext::DEFAULT &&
+				((autoSwitchContext && !FocusHook::captureState) ||
 					(toggleContextBind.context != currentContext));
-				bool notIsFirstKey = keystroke.VirtualKey != toggleContextBind.xinputVKeys.front();
+			bool notIsFirstKey = keystroke.VirtualKey != toggleContextBind.xinputVKeys.front();
 
-				if (notInContext || notIsFirstKey)
+			if (notInContext || notIsFirstKey)
+			{
+				bool allPressed = true;
+				for (size_t i = 0; i < toggleContextBind.xinputVKeys.size(); i++)
 				{
-					bool allPressed = true;
-					for (size_t i = 0; i < toggleContextBind.xinputVKeys.size(); i++)
+					if (!xinputwbuttons.contains(toggleContextBind.xinputVKeys[i]) ||
+						!(xinputState.Gamepad.wButtons & xinputwbuttons.at(toggleContextBind.xinputVKeys[i])))
 					{
-						if (!xinputwbuttons.contains(toggleContextBind.xinputVKeys[i]) ||
-							!(xinputState.Gamepad.wButtons & xinputwbuttons.at(toggleContextBind.xinputVKeys[i])))
-						{
-							allPressed = false;
-							break;
-						}
+						allPressed = false;
+						break;
 					}
+				}
 
-					if (allPressed) currentContext = currentContext == JoyToKeyContext::MENU ? JoyToKeyContext::GAMEPLAY : JoyToKeyContext::MENU;
+				if (allPressed) currentContext = currentContext == JoyToKeyContext::MENU ? JoyToKeyContext::GAMEPLAY : JoyToKeyContext::MENU;
+			}
+		}*/
+
+		for (auto& bind : joyToKeyboardBinds)
+		{
+			if (bind.context > JoyToKeyContext::DEFAULT &&
+				((autoSwitchContext && !FocusHook::captureState) ||
+				(toggleContextBind.context != currentContext)))
+				continue;
+
+			bool pressed = true;
+			bool justPressed = false;
+			bool justReleased = false;
+
+			for (size_t i = 0; i < bind.xinputVKeys.size(); i++)
+			{
+				bool state = false;
+				bool lastState = false;
+				USHORT vkey = bind.xinputVKeys[i];
+
+				if (vkey >= XINPUT_GAMEPAD_LEFT_THUMB_UP)
+					GetAxisState(xinputState, lastXinputState, vkey, bind.deadzone, state, lastState);
+				else
+				{
+					state = xinputState.Gamepad.wButtons & vkey;
+					lastState = lastXinputState.Gamepad.wButtons & vkey;
+				}
+
+				if (!state)
+				{
+					pressed = false;
+					if (lastState)
+					{
+						justReleased = true;
+						//bind.lastActiveTime = NULL;
+					}
+					break;
+				}
+				else if (!lastState)
+				{
+					justPressed = true;
+					bind.lastActiveTime = currentTime;
 				}
 			}
 
-			for (const auto& bind : joyToKeyBinds)
+			if (bind.minActiveTime > 0 && pressed)
 			{
-				if (bind.context > JoyToKeyContext::DEFAULT && 
-					((autoSwitchContext && !FocusHook::captureState) || 
-					(toggleContextBind.context != currentContext)))
-					continue;
+				std::chrono::duration<float> pressTime = currentTime - bind.lastActiveTime;
+				if (pressTime.count() * 1000 < bind.minActiveTime) continue;
+			}
+			else if (
+				(bind.eventType == JoyToKeyEventType::PRESSED && !(pressed || justReleased)) ||
+				(bind.eventType == JoyToKeyEventType::JUSTPRESSED && !justPressed) ||
+				(bind.eventType == JoyToKeyEventType::JUSTRELEASED && !justReleased)
+				) continue;
 
-				if (keystroke.VirtualKey != bind.xinputVKeys.front())
-					continue;
-
-				if (bind.xinputVKeys.size() > 1)
-				{
-					bool allPressed = true;
-					for (size_t i = 1; i < bind.xinputVKeys.size(); i++)
-					{
-						if (ERROR_SUCCESS != XInputGetStateProc(controllerIndex, &xinputState))
-						{
-							allPressed = false;
-							break;
-						}
-
-						if (!xinputwbuttons.contains(bind.xinputVKeys[i]) ||
-							!(xinputState.Gamepad.wButtons & xinputwbuttons.at(bind.xinputVKeys[i])))
-						{
-							allPressed = false;
-							break;
-						}
-					}
-
-					if (!allPressed)
-						continue;
-				}
+			for (const auto& outputVKey : bind.outputVKeys)
+			{
+				UINT scanCode = MapVirtualKey(outputVKey, MAPVK_VK_TO_VSC);
 
 				RAWINPUT rawInputKeyboard;
-
-				bool keyDown = keystroke.Flags == XINPUT_KEYSTROKE_KEYDOWN;// || keystroke.Flags == 0x0005;//XINPUT_KEYSTROKE_REPEAT;
-
-				USHORT vkey = bind.outputVKey;
-				UINT scanCode = MapVirtualKey(vkey, MAPVK_VK_TO_VSC);
-				USHORT flags = keyDown ? RI_KEY_MAKE : RI_KEY_BREAK;
-				UINT message = keyDown ? WM_KEYDOWN : WM_KEYUP;
-
 				rawInputKeyboard.header.dwType = RIM_TYPEKEYBOARD;
 				rawInputKeyboard.header.dwSize = sizeof(RAWINPUT);
 				rawInputKeyboard.header.hDevice = (HANDLE)0x00010041;
 				rawInputKeyboard.header.wParam = RIM_INPUT;
 				rawInputKeyboard.data.keyboard.MakeCode = scanCode;
-				rawInputKeyboard.data.keyboard.Flags = flags;
+				rawInputKeyboard.data.keyboard.Flags = 0;
 				rawInputKeyboard.data.keyboard.Reserved = 0;
-				rawInputKeyboard.data.keyboard.VKey = vkey;
-				rawInputKeyboard.data.keyboard.Message = message;
+				rawInputKeyboard.data.keyboard.VKey = outputVKey;
+				rawInputKeyboard.data.keyboard.Message = 0;
 				rawInputKeyboard.data.keyboard.ExtraInformation = 0;
 
-				RawInput::ProcessKeyboardInput(rawInputKeyboard.data.keyboard, nullptr);
-			}
-
-			for (const auto& bind : joyToMouseBinds)
-			{
-				if (bind.context > JoyToKeyContext::DEFAULT &&
-					((autoSwitchContext && !FocusHook::captureState) ||
-					(toggleContextBind.context != currentContext)))
-					continue;
-
-				if (keystroke.VirtualKey != bind.xinputVKeys.front())
-					continue;
-
-				if (bind.xinputVKeys.size() > 1)
+				if (bind.eventType == JoyToKeyEventType::JUSTPRESSED ||
+					bind.eventType == JoyToKeyEventType::JUSTRELEASED)
 				{
-					bool allPressed = true;
-					for (size_t i = 1; i < bind.xinputVKeys.size(); i++)
+					for (int i = 0; i < 2; i++)
 					{
-						if (ERROR_SUCCESS != XInputGetStateProc(controllerIndex, &xinputState))
-						{
-							allPressed = false;
-							break;
-						}
-
-						if (!xinputwbuttons.contains(bind.xinputVKeys[i]) ||
-							!(xinputState.Gamepad.wButtons & xinputwbuttons.at(bind.xinputVKeys[i])))
-						{
-							allPressed = false;
-							break;
-						}
+						rawInputKeyboard.data.keyboard.Flags = i == 0 ? RI_KEY_MAKE : RI_KEY_BREAK;
+						rawInputKeyboard.data.keyboard.Message = i == 0 ? WM_KEYDOWN : WM_KEYUP;
+						PostRawInputMessage(rawInputKeyboard);
 					}
-
-					if (!allPressed)
-						continue;
 				}
-
-				bool keyDown = keystroke.Flags == XINPUT_KEYSTROKE_KEYDOWN;// || keystroke.Flags == 0x0005;//XINPUT_KEYSTROKE_REPEAT;
-				USHORT state = 0;
-
-				if (bind.outputMouseEvent == "MOUSE_LEFT_BUTTON")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_LEFT_BUTTON_DOWN : RI_MOUSE_LEFT_BUTTON_UP;
-				else if (bind.outputMouseEvent == "MOUSE_RIGHT_BUTTON")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_RIGHT_BUTTON_DOWN : RI_MOUSE_RIGHT_BUTTON_UP;
-				else if (bind.outputMouseEvent == "MOUSE_MIDDLE_BUTTON")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_MIDDLE_BUTTON_DOWN : RI_MOUSE_MIDDLE_BUTTON_UP;
-				else if (bind.outputMouseEvent == "MOUSE_BUTTON_4")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_BUTTON_4_DOWN : RI_MOUSE_BUTTON_4_UP;
-				else if (bind.outputMouseEvent == "MOUSE_BUTTON_5")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_BUTTON_5_DOWN : RI_MOUSE_BUTTON_5_UP;
-				else if (bind.outputMouseEvent == "MOUSE_WHEEL")
-					rawInputMouse.data.mouse.usButtonFlags |= keyDown ? RI_MOUSE_WHEEL : 0;
+				else
+				{
+					rawInputKeyboard.data.keyboard.Flags = pressed ? RI_KEY_MAKE : RI_KEY_BREAK;
+					rawInputKeyboard.data.keyboard.Message = pressed ? WM_KEYDOWN : WM_KEYUP;
+					PostRawInputMessage(rawInputKeyboard);
+				}
 			}
 		}
 
-		RawInput::ProcessMouseInput(rawInputMouse.data.mouse, nullptr);
+		for (auto& bind : joyToMouseBinds)
+		{
+			if (bind.context > JoyToKeyContext::DEFAULT &&
+				((autoSwitchContext && !FocusHook::captureState) ||
+				(toggleContextBind.context != currentContext)))
+				continue;
+
+			bool pressed = true;
+			bool justPressed = false;
+			bool justReleased = false;
+
+			for (size_t i = 0; i < bind.xinputVKeys.size(); i++)
+			{
+				bool state = false;
+				bool lastState = false;
+				USHORT vkey = bind.xinputVKeys[i];
+
+				if (vkey >= XINPUT_GAMEPAD_LEFT_THUMB_UP)
+					GetAxisState(xinputState, lastXinputState, vkey, bind.deadzone, state, lastState);
+				else
+				{
+					state = xinputState.Gamepad.wButtons & vkey;
+					lastState = lastXinputState.Gamepad.wButtons & vkey;
+				}
+
+				if (!state)
+				{
+					pressed = false;
+					if (lastState)
+					{
+						justReleased = true;
+						//bind.lastActiveTime = 0;
+					}
+					break;
+				}
+				else if (!lastState)
+				{
+					justPressed = true;
+					bind.lastActiveTime = currentTime;
+				}
+			}
+
+			if (bind.minActiveTime > 0 && pressed)
+			{
+				std::chrono::duration<float> pressTime = currentTime - bind.lastActiveTime;
+				if (pressTime.count() * 1000 < bind.minActiveTime) continue;
+			}
+			else if (!(pressed || justReleased)) continue;
+
+			/*if (
+				(bind.eventType == JoyToKeyEventType::PRESSED && !(pressed || justReleased)) ||
+				(bind.eventType == JoyToKeyEventType::JUSTPRESSED && !justPressed) ||
+				(bind.eventType == JoyToKeyEventType::JUSTRELEASED && !justReleased)
+				) continue;*/
+
+			for (const auto& outputMouseEvent : bind.outputMouseEvents)
+			{
+				if (outputMouseEvent == "LEFT_BUTTON")
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_LEFT_BUTTON_DOWN : RI_MOUSE_LEFT_BUTTON_UP;
+				else if (outputMouseEvent == "RIGHT_BUTTON")
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_RIGHT_BUTTON_DOWN : RI_MOUSE_RIGHT_BUTTON_UP;
+				else if (outputMouseEvent == "MIDDLE_BUTTON")
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_MIDDLE_BUTTON_DOWN : RI_MOUSE_MIDDLE_BUTTON_UP;
+				else if (outputMouseEvent == "BUTTON_4")
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_BUTTON_4_DOWN : RI_MOUSE_BUTTON_4_UP;
+				else if (outputMouseEvent == "BUTTON_5")
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_BUTTON_5_DOWN : RI_MOUSE_BUTTON_5_UP;
+				else if (outputMouseEvent == "WHEEL_UP" && pressed)
+				{
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_WHEEL : 0;
+					rawInputMouse.data.mouse.usButtonData = pressed ? 120 : 0;
+				}
+				else if (outputMouseEvent == "WHEEL_DOWN" && pressed)
+				{
+					rawInputMouse.data.mouse.usButtonFlags |= pressed ? RI_MOUSE_WHEEL : 0;
+					rawInputMouse.data.mouse.usButtonData = pressed ? -120 : 0;
+				}
+			}
+		}
+
+		PostRawInputMessage(rawInputMouse);
 
 		lastXinputState = xinputState;
 
@@ -1071,7 +1228,7 @@ DWORD WINAPI RawInputWindowThread(LPVOID lpParameter)
 	MSG msg;
 	ZeroMemory(&msg, sizeof(msg));
 
-	std::thread joyToKeyThread(JoyToKeyThread);
+	std::thread joyToKeyThread(RawInput::JoyToKeyThread);
 
 	while (msg.message != WM_QUIT)
 	{
